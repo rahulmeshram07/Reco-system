@@ -14,7 +14,6 @@ session (s),   reco strategy x(s), user interest strategy \theta(s),      F
 5000
 10000   
 
-skewed reward structure for sites and it is align towards the user interest. 
+skewed reward structure for sites and it is align towards the user interest 
 skewed reward structure for sites and it is opposite to user interest 
-
 
