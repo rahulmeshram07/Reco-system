@@ -1,0 +1,106 @@
+% this is program when the user interest is changing and there is  
+%  no projection  % at same time recommendation profile is changeing its state.
+% step sizes for both are same and it is 0.001. 
+clc
+clear all
+close all
+%
+M=5; %no of sites
+N=4; %no of topics
+epsilon=0.01; % this is constraints for recommendation strategy
+max_sess = 20000; % maximum session
+T_max =10; % average over 
+
+%----------------------------------------------
+r = [3, 4, 6, 7, 12]'.*10; % reward for each site 
+Publish_Mx = [0.23, 0.21, 0.28, 0.28; ...
+              0.12, 0.06, 0.15,0.70; ...
+              0.1, 0.4, 0.45, 0.05; ...
+              0.22,0.28, 0.24, 0.26; ...
+              0.62, 0.13, 0.20, 0.05]; 
+step_size_theta = 0.001; % fixed step size for theta 
+step_size_x  = 0.001; % fixed step size for recommendation strategy x
+Delta = [0.5 0.5 0.5 0.5]; % This is maximum influence for the topics
+beta = [3 3 3 3 3];  % this determines the rate of influence
+theta_0 = [0.01, 0.19, 0.15, 0.65]'; % initial theta 
+x_0=[0.02 0.05 0.05 0.08 0.8]'; % initial recommendation strategy
+
+%----------------------------------------------
+% Obj_F_avg = zeros(1,max_sess); % this store expected reward over all session and it is avg for T_max
+Obj_F_sum = zeros(1,max_sess);
+% x_strat_avg = zeros(M,1); % this store avg startegy of recommendation
+x_strat_sum = zeros(M,1); % take sum
+% theta_avg = zeros(N,1); % avg interest 
+theta_sum = zeros(N,1);
+%----------------------------------------------
+for ite_T = 1:T_max
+
+thetaold = theta_0;  % initial theta
+xold= x_0;  % intial strategy
+xneq = zeros(M,1) ; %initialize reco strategy at beginning of session
+trial_sess=zeros(max_sess,1); % this counts the number of trials in a session
+thetanew = zeros(N,1); % initialize new value of theta to zeros
+count_topic_show_ses = zeros(N,max_sess); % % this counts the number of times topic shown in session
+flag=0; % set the flag to zero 
+F_sess = zeros(1,max_sess); % this is variable to store expected reward for each session
+ 
+for sess=1:max_sess 
+    % for each session 
+    counter=0; % this counts the number of trials in  given session
+    count_topic_show = zeros(1,N); % it is a vector that shows number of times topic n is shown and it will be reset after each session
+    
+    while flag==0 % run until user finds topic of interest and click through happens
+        % at a given trail it shows only one topic on a site
+        [xv1 m]=tv_site_reco(xold,M); %m is site_no which will be recommended i.e the index at which xv1 = 1
+        [xv2 n]=tv_topic_disp(N,Publish_Mx,m); % n is topic shown  to the user which is also the final topic of interest 
+        % count the number of times topic n is shown to the user
+        count_topic_show(n)=count_topic_show(n) + 1;  
+        xv3=tv_topic_user_int(thetaold,N); % topic with user interested in
+        if(xv2==xv3) % if topic shown to user and user topic interest mathces
+            flag=1; 
+        end
+        counter=counter+1;% number of trials
+        
+    end % number of trials
+    
+    flag=0; % once user finds matching site, the session ends and flags are reset to 0             
+    count_topic_show_ses(:,sess) = count_topic_show; % count the number of times a perticular topics are shown
+    trial_sess(sess)=counter; % number of trials in a  session 
+    
+    F_x = real_benefit(xold,Publish_Mx,thetaold,r,counter); % expected reward from each session using old x and old theta 
+    F_sess(sess)=F_x;
+    
+    g_k=zeros(M,1); % this is variable associated with noisy gradient
+    g_k(m) = grad(xold,Publish_Mx,r,m,n,sess,trial_sess); % where m and n are site shown and topic accepted  
+    % we need to project and obtain new strategy 
+    xnew = proj_twotimescale(xold,g_k,M,epsilon, step_size_x);  %% a_k function = 1/k*log(k)
+    
+    %------------------------------------------------------------------------
+    % we now want to obtain influence on theta from reco system
+    tempaa = zeros(1,N);
+    tempbb = zeros(1,N);
+    for ite = 1:N
+    tempaa(ite) = 1 - beta(ite).^(-count_topic_show(ite));
+    tempbb(ite) = Delta(ite).*tempaa(ite);
+    end
+    weight = (tempbb)./(sum((tempbb)));           
+    thetanew = (1-step_size_theta).*thetaold + step_size_theta.*weight'; % user adapts interest strategy 
+    thetaold = thetanew;  % update the old theta wih new
+    xold =xnew; % update the old strategy with new one 
+    rho_0 = xold'*Publish_Mx;
+
+end
+
+Obj_F_sum = Obj_F_sum + F_sess;
+x_strat_sum = x_strat_sum + xnew;
+theta_sum = theta_sum +thetanew; 
+
+end
+
+Obj_F_avg = Obj_F_sum./T_max ;
+x_strat_avg = x_strat_sum./T_max;
+theta_avg = theta_sum./T_max;
+figure
+plot(Obj_F_avg);
+
+
